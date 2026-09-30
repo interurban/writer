@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+
+# Writer project state — per-topic briefs, sources, claims ledger, voice
+# profile, drafts, evals. Runtime state, never source.
+writer/.writer/
+writing/
+.writer/
+
+# Benchmark run artifacts: generated articles, telemetry, sealed blind
+# frames, judgments, and reports. Reproduce with run.py, don't commit.
+benchmarks/technical-writing/runs/
+benchmarks/technical-writing/experiments/

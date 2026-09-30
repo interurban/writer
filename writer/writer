@@ -1,0 +1,120 @@
+#!/bin/sh
+# writer — writing-native agent harness built on Prime Agent.
+# Primary UX: `writer` opens the interactive TUI (Prime Agent + writer
+# skills and slash-command prompt templates). Headless state helpers
+# (`init`, `status`, ...) run locally without the daemon.
+set -eu
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+WRITER_SKILLS="$ROOT/skills/writer $ROOT/skills/technical-writing $ROOT/skills/research $ROOT/skills/editorial-critique $ROOT/skills/technical-verification $ROOT/skills/voice"
+PROMPTS="$ROOT/writer/prompts"
+export PYTHONPATH="$ROOT/skills/writer/src${PYTHONPATH:+:$PYTHONPATH}"
+
+PRIME_BIN=""
+if [ -x "$ROOT/target/release/prime-agent" ]; then
+  PRIME_BIN="$ROOT/target/release/prime-agent"
+elif command -v prime-agent >/dev/null 2>&1; then
+  PRIME_BIN="prime-agent"
+fi
+
+usage() {
+  cat <<'EOF'
+Usage:
+  writer                        Open the interactive writing workspace (TUI)
+  writer -p "task" [@files]     Non-interactive run (passthrough to prime-agent)
+  writer init <name>             Create writing/ project here
+  writer new <name>              Archive current project, start fresh
+  writer status [--model M]     Compact status line
+  writer models                 Model readiness: providers, defaults, policy
+  writer drafts                 List drafts (id, parent, final)
+  writer draft <id>             Print a draft body
+  writer compare <a> <b>        Structural comparison (lines, newer)
+  writer --help                 This help
+
+Slash commands inside the TUI: /drafts /sources /claims /compare
+/verify /voice /project /trace /new-topic (plus Prime's /model /effort /tree ...).
+EOF
+}
+
+skill_args() {
+  # One --skill per path (hand-rolled parser accepts repeats).
+  for s in $WRITER_SKILLS; do
+    printf '%s' " --skill $s"
+  done
+  printf '%s' " --prompt-template $PROMPTS"
+}
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
+  usage
+  exit 0
+fi
+
+case "${1:-}" in
+  init)
+    shift
+    python3 -c 'import sys,json,writer; print(json.dumps(writer.project_init(sys.argv[1] if len(sys.argv)>1 else "untitled"), indent=2))' "$@"
+    ;;
+  new)
+    shift
+    python3 -c 'import sys,json,writer; print(json.dumps(writer.project_new(sys.argv[1] if len(sys.argv)>1 else "untitled"), indent=2))' "$@"
+    ;;
+  status)
+    shift
+    MODEL=""
+    if [ "${1:-}" = "--model" ]; then MODEL="${2:-}"; shift 2 || true; fi
+    python3 -c 'import sys,writer; print(writer.status_line(sys.argv[1] or None))' "$MODEL"
+    ;;
+  drafts)
+    shift
+    python3 <<'EOF'
+import writer
+for d in writer.drafts_list():
+    print(f"{d['id']} parent={d.get('parent')} final={d.get('is_final')}")
+EOF
+    ;;
+  draft)
+    shift
+    python3 -c 'import sys,writer; print(writer.drafts_get(sys.argv[1])["body"])' "$@"
+    ;;
+  compare)
+    shift
+    python3 -c 'import sys,json,writer; print(json.dumps(writer.drafts_compare(sys.argv[1], sys.argv[2]), indent=2))' "$@"
+    ;;
+  models)
+    shift
+    python3 <<'EOF'
+import json, writer
+print(json.dumps(writer.models_status(), indent=2))
+EOF
+    ;;
+  "")
+    if [ -z "$PRIME_BIN" ]; then
+      echo "writer: prime-agent binary not found. Build with 'cargo build --release -p pa-cli' or install prime-agent, then rerun." >&2
+      echo "Local state helpers still work: writer init|status|drafts|draft|compare." >&2
+      exit 1
+    fi
+    # Readiness banner: informative only, never blocks launch.
+    python3 <<'EOF' 2>/dev/null || true
+import writer
+s = writer.models_status()
+if s["ready"]:
+    p = s["primary"]
+    print(f"Writer  Model: {p['provider'] or '?'}/{p['model'] or '?'}"
+          f"  Thinking: {p['thinking'] or 'default'}  Ready")
+else:
+    print("Writer  No usable model is currently configured.")
+    print("        Run /login for subscription providers or set OPENROUTER_API_KEY.")
+EOF
+    # shellcheck disable=SC2086
+    exec $PRIME_BIN $(skill_args)
+    ;;
+  *)
+    # Passthrough (e.g. -p, --mode, attach): keep writer skills wired in.
+    if [ -z "$PRIME_BIN" ]; then
+      echo "writer: prime-agent binary not found for passthrough mode." >&2
+      exit 1
+    fi
+    # shellcheck disable=SC2086
+    exec $PRIME_BIN $(skill_args) "$@"
+    ;;
+esac

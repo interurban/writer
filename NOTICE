@@ -1,0 +1,20 @@
+# NOTICE
+
+This project is MIT licensed. Copyright (c) 2025-2026 Prime Intellect Ltd.
+See [LICENSE](LICENSE).
+
+The code here was written as part of, and extracted from,
+[PrimeIntellect-ai/prime-agent](https://github.com/PrimeIntellect-ai/prime-agent).
+It is published separately so the Writer harness and its evaluation loop can
+be read and run on their own; the authoritative copy remains the one in the
+Prime Agent repository, and the MIT notice is preserved as MIT requires.
+
+Not included here:
+
+- `crates/pa-writer` — the Rust implementation of the same editorial state.
+  It inherits `version` and dependency versions from the Prime Agent Cargo
+  workspace and therefore does not build outside that repository. Use the
+  Prime Agent checkout for the Rust side.
+- Any Writer project state (`writing/`, the legacy `.writer/`) or benchmark
+  run artifacts. Both are gitignored: they are per-topic runtime data, not
+  source.
